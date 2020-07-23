@@ -6,7 +6,7 @@ class TwoSchechEnv(gym.Env):
     
     metadata = {'render.mode': ['human']}
     
-    def __init__(self,  DAYS,SLOTS1,SLOTS2, COLLECTIONS, NEXT_DAY_P ):
+    def __init__(self,  DAYS,SLOTS1,SLOTS2, NEXT_DAY_P ):
         
         '''
         
@@ -22,7 +22,8 @@ class TwoSchechEnv(gym.Env):
         
         
         #Number of collection days of current patient
-        self.patient_collection_days = np.random.randint(1,COLLECTIONS)
+        #This is the distrebution we were given for collection days
+        self.patient_collection_days = np.random.choice([1,2,3,4,5], p = [.4,.3,.15.1,.05])
         
         #The Current Day 
         self.current_day = 0 
