@@ -2,20 +2,24 @@ import gym
 from gym import spaces
 import numpy as np
 
+''' Variables:
+Days: total number of days to be scheduled for D1 and D2
+SLOTS1: available number of spots for process 1 (D1)
+SLOTS2: available number of spots for prcess 2 (D2) = SLOTS1 * 8
+COLLECTIONS: number of days needed for D1 (to collect the stem cells)
+NEXT_DAY_P: the probability that the next patient will be starting in the next day
+'''
+DAYS = 10 # number of days the model spans
+SLOTS1 = 5 # number of avaiblable room per day for process 1
+SLOTS2 = 5 # number of available room per day for process 2. We will multiply work hour later
+COLLECTIONS = 5 # the max number of collections a patient needs
+NEXT_DAY_P = .1 #
+
 class TwoSchechEnv(gym.Env):
 
     metadata = {'render.mode': ['human']}
 
-    def __init__(self, DAYS, SLOTS1, SLOTS2, COLLECTIONS, NEXT_DAY_P ):
-
-        ''' Variables:
-        Days: total number of days to be scheduled for D1 and D2
-        SLOTS1: available number of spots for process 1 (D1)
-        SLOTS2: available number of spots for prcess 2 (D2) = SLOTS1 * 8
-        COLLECTIONS: number of days needed for D1 (to collect the stem cells)
-        NEXT_DAY_P: the probability that the next patient will be starting in the next day
-        '''
-        #Variables used for the state
+    def __init__(self):
 
         # daily scheduled patient numbers for D1
         self.sched1 = np.zeros(DAYS)
@@ -92,14 +96,20 @@ class TwoSchechEnv(gym.Env):
         self.remainingSlots2 = DAYS * SLOTS2 * 9
         self.overlap_count = 0
         self.total_reward = 0
-        self.two_weeks_violations = 0
+        #self.two_weeks_violations = 0
 
-        obs = makeObs() # should we also initialize the observation space??
+        obs = self.makeObs() # should we also initialize the observation space??
         return obs
 
     # Print out results
     def render(self):
-        pass
+        print(self.scheduled)
+        print("day", self.current_day)
+        print("Threre are ", self.overlap_count, "overlaps")
+        print("Patient Index:",self.patient_index)
+        print("total reward:", self.total_reward)
+        print("Slots1 remaining:", self.remaingSlots1)
+        print("Slots2 remaining:", self.remaingSlots2)
 
     #************************ Foramting Logic ******************************"""
 
@@ -112,7 +122,7 @@ class TwoSchechEnv(gym.Env):
     #  Tells us when to stop, return True or False
     '''need to be fixed'''
     def done(self):
-        if (self.current_day == Days or self.remainingSlots1 < self.currentpatient_collection_day):
+        if (self.current_day == DAYS or self.remainingSlots1 < self.currentpatient_collection_day):
             return True
         else:
             return False
@@ -130,33 +140,37 @@ class TwoSchechEnv(gym.Env):
         d1 = action[0]
         d2 = action[1]
         collection_num = self.currentpatient_collection_day
-        D1_full = checkD1(d1, collection_num) # check whether collection period in D1 is full or not
+        D1_full = self.checkD1(d1, collection_num) # check whether collection period in D1 is full or not
 
         if (d1 < self.current_day) or (d2 < self.current_day): # out of total days' range
             return False
-        elif (d1 + self.currentpatient_collection_day < d2 ): # day2 < day1 + collection# overlap
+        elif (d1 + collection_num < d2 ): # day2 < day1 + collection# overlap
             self.overlap_count += 1
             return False
-        elif (not D1_full) and self.sched2[d2] < SLOTS2: # do we need this?
-            updateInternalStates(self, d1, d2)
+        elif (not D1_full) and self.sched2[d2] < SLOTS2 and (d1 + collection_num < DAYS): # do we need this?
+            self.updateInternalStates(d1, d2)
             self.patient_index += 1 # go to next patient ??
             return True
         else: # other overbook case
             return False
 
     def checkD1(self, d1, collection_num): #returns True if any day is full, else False
-        for i in range(collection_num):
-            if self.sched1[d1+i] >= SLOTS1: # check whether this day is fully schedled
-                return True
-        return False
+        if d1 + collection_num >= DAYS:
+            return True
+        else:
+            for i in range(collection_num):
+                if self.sched1[d1+i] >= SLOTS1: # check whether this day is fully schedled
+                    return True
+            return False
+
 
     '''Internal updateEndOfDay when scheled successfully
     '''
     def updateInternalStates(self, d1, d2):
-        updateMatrix(d1,d2)
-        updateQ1(d1,d2)
-        updateRemainingSlots()
-        updateEndOfDay()
+        self.updateMatrix(d1,d2)
+        self.updateQ1(d1,d2)
+        self.updateRemainingSlots()
+        self.updateEndOfDay()
 
     def updateMatrix(self, d1, d2):
         #for each collection day of D1, we need to find an empty slot to schedule
@@ -172,18 +186,18 @@ class TwoSchechEnv(gym.Env):
             break
 
     def updateQ1(self, d1, d2):
-        self.Q1.append(d2-d1)
+        self.Q1 = np.append(self.Q1, [d2-d1])
 
     def updateRemainingSlots(self):
         self.remainingSlots1 -= 1
         self.remainingSlots2 -= 1
 
     def updateEndOfDay(self):
-        self.end_day = random.binomial(1, NEXT_DAY_P)
+        self.end_day = np.random.binomial(1, NEXT_DAY_P)
 
     '''Agent updates'''
     def updateObservations(self, action, schedled):
-        seld.updatesched(action,schedled)
+        self.updatesched(action,schedled)
         self.updateCurrentday(schedled)
         self.updateCollectionday(schedled)
 
@@ -208,10 +222,11 @@ class TwoSchechEnv(gym.Env):
 
     def SlotReward(self,action,scheduled):
         if scheduled:
-            return +5
+            return 5.0
         else:
             return -3 # talk about it later
 
     def QReward(self,action,scheduled):
         if scheduled:
             return 10.0 * self.currentpatient_collection_day*1.0/(action[1]-action[0])
+        return 0.0
