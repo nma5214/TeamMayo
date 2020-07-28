@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 
+
 #Make sure that the weekend logic in updateQ1 is correct
 #Changed Q1
 #changed a bug in matrix2 scheduling
@@ -29,16 +30,11 @@ class TwoSchechEnv(gym.Env): #set up the environment
 
     def __init__(self):
 
-        # daily scheduled patient numbers for D1
-        self.sched1 = np.zeros(DAYS)
-        # daily scheduled patient numbers for D2
-        self.sched2 = np.zeros(DAYS)
-
+        self.sched1 = np.zeros(DAYS) # daily scheduled patient numbers for D1
+        self.sched2 = np.zeros(DAYS) # daily scheduled patient numbers for D2
         # Number of collection days needed for current patient
         self.currentpatient_collection_day = np.random.choice(np.arange(1, COLLECTIONS+1), p=[0.4, 0.3, 0.15, 0.09, 0.06])
-
-        # Current Day
-        self.current_day = 0
+        self.current_day = 0 # Current Day starting at day 0
 
         '''Observation Space
         '''
@@ -47,7 +43,6 @@ class TwoSchechEnv(gym.Env): #set up the environment
         # shape[2: 1+DAYS] : schedule for D1
         # shape[2+DAYS : ] : schedule for D2
         shape_length = 1 + 1 + DAYS + DAYS
-
         # ??each column of the obs_space contains the information of current_day, collection_number, schedule_D1, schedule_D2
         self.observation_space = spaces.Box(low = 0 , high = SLOTS1, shape = (2+DAYS+DAYS,), dtype = int)
 
@@ -55,18 +50,16 @@ class TwoSchechEnv(gym.Env): #set up the environment
         '''
         self.action_space = spaces.MultiDiscrete([DAYS,DAYS])
 
-
         '''Internal variables we use to build the schedule
         '''
-        # Initialize the patient number/index
-        self.patient_index = 1
+        self.patient_index = 1 # Initialize the patient number/index
         # Matrix for sched1 and sched2
         self.MatrixSched1 = np.zeros((DAYS, SLOTS1))
         self.MatrixSched2 = np.zeros((DAYS, SLOTS2))
-        self.Q1 = np.array([])
+        self.Q1 = np.array([]) # store the q1 for each scheduling
 
-        self.end_day = 0 #???
-        # remianing Slots
+        self.end_day = 0
+        # remianing Slots used to tell when the scheduling need to stop
         self.remainingSlots1 = DAYS * SLOTS1
         self.remainingSlots2 = DAYS * SLOTS2
 
@@ -78,14 +71,14 @@ class TwoSchechEnv(gym.Env): #set up the environment
 
 
     def step(self,action):
-        # Tranistion returns A Boolean value, depending on whether scheduling happened
+        # Tranistion returns a Boolean value, depending on whether scheduling happened
         schedled = self.Transition(action)
-        # Reward returns reward value for each action based on whether scheduling happened
+        # Reward returns the reward value for each action based on whether scheduling happened
         reward = self.Reward(action,schedled)
         self.total_reward += reward
         # makeObs updates the observatoin space
         obs = self.makeObs()
-        # done function check whether
+        # done function check whether finish schedueling
         done = self.done
         return obs, reward, done, {}
 
@@ -123,17 +116,10 @@ class TwoSchechEnv(gym.Env): #set up the environment
             print("total reward:", self.total_reward)
             print("Slots1 remaining:", self.remainingSlots1)
             print("Slots2 remaining:", self.remainingSlots2)
-        
-        
         else:
-            
-            
             blue_patch = mpatches.Patch(color='blue', label='Stem Collections')
             orange_patch = mpatches.Patch(color='orange', label='PreChemo')
-
-
             fig = plt.figure()
-            
             plt.bar(np.arange(DAYS),env.sched1)
             plt.bar(np.arange(DAYS),env.sched2)
             plt.xlabel("Days")
@@ -163,15 +149,15 @@ class TwoSchechEnv(gym.Env): #set up the environment
     def Transition(self,action):
         #Returns boolean depending on whither scheduling happend or not
         scheduled = self.updateSched(action)
-        
+
         d1 = action[0]
         d2 = action[1]
-        self.updateInternalStates(d1, d2,scheduled)
+        self.updateInternalStates(d1,d2,scheduled)
 
         #self.updateInternalStates(action)
         self.updateObservations(action, scheduled)
-        
-        
+
+
 
     def updateSched(self,action):
         d1 = action[0]
@@ -181,14 +167,19 @@ class TwoSchechEnv(gym.Env): #set up the environment
 
         if (d1 < self.current_day) or (d2 < self.current_day): # out of total days' range
             return False
-        elif (d1 + collection_num > d2 ): # day2 < day1 + collection# overlap MISTAKE HERE: REVERSE INEQUALITY
+        elif (d1 + collection_num > d2 ): # day2 < day1 + collection# overlap
             self.overlap_count += 1
             return False
-        elif  D1_full or self.sched2[d2] >= SLOTS2 or (d1 + collection_num >= DAYS): # do we need this?
-            
-            return False
-        else: # other overbook case
+        #elif  D1_full or self.sched2[d2] >= SLOTS2 or (d1 + collection_num >= DAYS): # do we need this?
+            #return False
+        #else: # other overbook case
+            #return True
+        elif (not D1_full) and self.sched2[d2] < SLOTS2 and (d1 + collection_num < DAYS):
+            #self.updateInternalStates(d1, d2)
+            #self.patient_index += 1 # go to next patient ??
             return True
+        else: # other overbook case
+            return False
 
     def checkD1(self, d1, collection_num): #returns True if any day is full, else False
         if d1 + collection_num >= DAYS:
@@ -225,12 +216,12 @@ class TwoSchechEnv(gym.Env): #set up the environment
                 break
 
     def updateQ1(self, d1, d2):
-        weekend = 0 
-        if(d1 +self.currentpatient_collection_day %5 == 0 ):
+        weekend = 0
+        if(d1 +self.currentpatient_collection_day % 4 == 0 ): # day starts at 0
             weekend = 2
-        self.Q1 = np.append(self.Q1, [d2-d1-self.currentpatient_collection_day + weekend])
+        self.Q1 = np.append(self.Q1, [d2-d1-self.currentpatient_collection_day + weekend]) # ?? should we consider how many weekends between d1 and d2
 
-    def updateRemainingSlots(self, d1):
+    def updateRemainingSlots(self, d1): # for D1, the remaining slots should subscribe the passed day's empty slots
         self.remainingSlots1 -= (1 * self.currentpatient_collection_day + (SLOTS1-self.sched1[d1])*self.end_day)
         self.remainingSlots2 -= 1
 
@@ -271,5 +262,5 @@ class TwoSchechEnv(gym.Env): #set up the environment
 
     def QReward(self,action,scheduled):
         if scheduled:
-            return 10.0 * self.currentpatient_collection_day*1.0/(action[1]-action[0])
+            return 20.0 * self.currentpatient_collection_day*1.0/(action[1]-action[0])
         return 0.0
